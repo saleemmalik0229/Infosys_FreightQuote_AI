@@ -130,11 +130,8 @@ When a user logs in (either client or admin), the system generates a signed JSON
 ### Signup Page
 ![Signup](screenshots/signup.png)
 
-### Forgot Password - Security Question
-![Security Question](screenshots/forgot_password_security.png)
-
-### Forgot Password - OTP
-![OTP](screenshots/forgot_password_otp.png)
+### Forgot Password - Both
+![Page](screenshots/forgot_password_security.png)
 
 ### OTP Email
 ![OTP Email](screenshots/otp_email.png)
