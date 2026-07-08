@@ -133,9 +133,6 @@ When a user logs in (either client or admin), the system generates a signed JSON
 ### Forgot Password - Both
 ![Page](screenshots/forgot_password_security.png)
 
-### OTP Email
-![OTP Email](screenshots/otp_email.png)
-
 ### User Dashboard
 ![Dashboard](screenshots/dashboard.png)
 
