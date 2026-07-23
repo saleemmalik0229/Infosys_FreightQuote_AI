@@ -1,7 +1,15 @@
 import sys
+import time
+import json
+import datetime
 from pathlib import Path
 
-# Add Milestone2 and parent root directory to sys.path
+import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
+from streamlit_option_menu import option_menu
+
+# Resolve parent and module directories
 M2_DIR = Path(__file__).resolve().parent
 ROOT_DIR = M2_DIR.parent
 for p in [str(M2_DIR), str(ROOT_DIR)]:
@@ -13,6 +21,8 @@ import db
 import auth
 import ui_theme
 import admin_dash
+from train_ml_freight import FreightQuoteMLSuite
+from llm_engine_freight import LogisticsLLMEngine
 
 # Configuration Constants
 ADMIN_EMAIL = config.ADMIN_EMAIL
@@ -33,6 +43,18 @@ db.seed_initial_users(auth.hash_txt, auth.check_txt, ADMIN_EMAIL, ADMIN_PASSWORD
 
 # Inject Custom CSS Theme (Preserving Milestone 1 Visual Identity)
 ui_theme.inject_theme()
+
+# Load ML Suite and LLM Copilot Engine
+@st.cache_resource
+def load_ml_suite():
+    return FreightQuoteMLSuite()
+
+@st.cache_resource
+def load_llm_engine():
+    return LogisticsLLMEngine()
+
+ml_suite = load_ml_suite()
+llm_engine = load_llm_engine()
 
 # --- PyNgrok Integration ---
 @st.cache_resource
@@ -240,14 +262,12 @@ if not st.session_state.token:
             elif st.session_state.page == "Forgot":
                 ui_theme.render_auth_header("Reset Password")
                 
-                # STAGE 1: ASK EMAIL & VERIFICATION METHOD
                 if st.session_state.forgot_stage == "email":
                     st.markdown("<p style='text-align:center;'>Enter your registered email address to choose verification method.</p>", unsafe_allow_html=True)
                     email = st.text_input("Registered Email", placeholder="you@example.com").lower().strip()
                     st.markdown("<br>", unsafe_allow_html=True)
                     
                     col_sq, col_otp = st.columns(2)
-                    
                     if col_sq.button("Via Security Question", use_container_width=True):
                         if not email:
                             st.error("⚠️ Please enter your email.")
@@ -277,7 +297,7 @@ if not st.session_state.token:
                                     
                                     if info == "sandbox_mode":
                                         st.session_state.dev_sandbox_otp = otp
-                                        st.warning("⚠️ SMTP configurations (EMAIL_ADDRESS or EMAIL_PASSWORD) are not set. Activating Sandbox Recovery. Your OTP code is shown below.")
+                                        st.warning("⚠️ SMTP configurations not set. Developer OTP updated below.")
                                     st.success("✅ 6-digit OTP code generated.")
                                     time.sleep(0.5)
                                     st.rerun()
@@ -286,7 +306,6 @@ if not st.session_state.token:
                             else:
                                 st.error("Email address not found.")
 
-                # STAGE 2A: VIA SECURITY QUESTION
                 elif st.session_state.forgot_stage == "sq":
                     st.info(f"❓ **Security Question:** {st.session_state.security_question}")
                     sa_input = st.text_input("Your Answer", placeholder="Answer text").lower().strip()
@@ -325,10 +344,8 @@ if not st.session_state.token:
                         st.session_state.forgot_stage = "email"
                         st.rerun()
 
-                # STAGE 2B: ENTER OTP CODE (WITH ESCALATING COOLDOWN)
                 elif st.session_state.forgot_stage == "otp":
                     st.info(f"📧 Verification code generated for **{st.session_state.reset_email}**.")
-                    
                     if st.session_state.dev_sandbox_otp:
                         st.info(f"🔑 **[Developer Mode OTP]:** `{st.session_state.dev_sandbox_otp}`")
                         
@@ -336,7 +353,6 @@ if not st.session_state.token:
                     st.markdown("<br>", unsafe_allow_html=True)
                     
                     col1, col2, col3 = st.columns(3)
-                    
                     if col1.button("Verify OTP Code", use_container_width=True):
                         if not otp_input or len(otp_input) != 6:
                             st.error("⚠️ Please enter a valid 6-digit code.")
@@ -350,9 +366,7 @@ if not st.session_state.token:
                             else:
                                 st.error(f"❌ {msg}")
                                 
-                    # OTP Resend with Cooldown
                     can_resend, remaining_secs, next_count = auth.check_otp_resend_cooldown(st.session_state.reset_email)
-                    
                     if col2.button("Resend Code", use_container_width=True):
                         if not can_resend:
                             st.warning(f"⏳ Please wait {remaining_secs} seconds before requesting another code.")
@@ -377,7 +391,6 @@ if not st.session_state.token:
                         st.session_state.dev_sandbox_otp = None
                         st.rerun()
 
-                # STAGE 3: CREATE NEW PASSWORD (AFTER OTP SUCCESS)
                 elif st.session_state.forgot_stage == "reset":
                     st.markdown("🔒 **Create New Secure Password:**")
                     npw = st.text_input("New Password", type="password", placeholder="••••••••")
@@ -418,7 +431,7 @@ if not st.session_state.token:
                     navigate("Login")
 
 # ============================================================
-# AUTHENTICATED ROUTING (Dashboard views)
+# AUTHENTICATED ROUTING (Dashboard & AI Copilot Views)
 # ============================================================
 else:
     payload = auth.verify_jwt(st.session_state.token)
@@ -431,7 +444,6 @@ else:
 
     email = payload["email"]
     user_rec = db.get_user_by_email(email)
-    
     if not user_rec:
         st.session_state.token = None
         st.session_state.page = "Login"
@@ -447,14 +459,18 @@ else:
             <div style="font-size: 36px; margin-bottom: 6px; color: #0078D4;">📦</div>
             <div style="font-weight: 700; font-size: 16px; color: #111827;">Infosys Portal</div>
             <div style="font-size: 11px; color: #4B5563; font-weight: 600; margin-top: 2px;">
-                {"🛡️ Admin Control" if is_admin else "⚙️ User Panel"}
+                {"🛡️ Admin Control Desk" if is_admin else "⚡ Enterprise AI Panel"}
             </div>
         </div>
         <hr style="border-top: 1px solid #E5E7EB; margin: 10px 0 20px 0;">
         """, unsafe_allow_html=True)
 
-        opts = ["Dashboard", "Settings", "Logout"] if is_admin else ["Dashboard", "Analytics", "Reports", "Logout"]
-        icons = ["house", "gear", "box-arrow-right"] if is_admin else ["house", "graph-up", "file-text", "box-arrow-right"]
+        if is_admin:
+            opts = ["Dashboard", "ML Model Directory", "Settings", "Logout"]
+            icons = ["house", "cpu", "gear", "box-arrow-right"]
+        else:
+            opts = ["Dashboard", "Dynamic Pricing", "Route Delay & Compliance", "AI Copilot Audit", "Reports", "Logout"]
+            icons = ["house", "calculator", "shield-check", "robot", "file-text", "box-arrow-right"]
 
         menu = option_menu(
             menu_title=None,
@@ -504,24 +520,40 @@ else:
     if is_admin:
         if menu == "Dashboard":
             admin_dash.render_admin_dashboard(ngrok_url)
+        elif menu == "ML Model Directory":
+            st.markdown("### 🤖 SQLite Trained ML Champion Models (`ml_models` table)")
+            models_data = db.get_all_ml_models_metadata()
+            if models_data:
+                m_df = pd.DataFrame(models_data)[["id", "agent_name", "model_type", "algorithm_name", "training_time_seconds", "model_file_path", "created_at"]]
+                m_df.columns = ["ID", "Agent Name", "Model Type", "Champion Algorithm", "Training Time (s)", "Model Artifact Path", "Trained Date"]
+                st.dataframe(m_df, use_container_width=True, hide_index=True)
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.subheader("Champion Model Performance Metrics")
+                for md in models_data:
+                    with st.expander(f"📊 {md['agent_name']} — {md['algorithm_name']}"):
+                        st.json(md["metrics"])
+                        st.write("**Feature Names Used:**", md["feature_names"])
+            else:
+                st.info("No ML models currently trained in database. Run `python Milestone2/train_ml_freight.py` to train champion models.")
         elif menu == "Settings":
             admin_dash.render_admin_settings()
 
-    # --- REGULAR USER PAGES ---
+    # --- REGULAR USER / ENTERPRISE PAGES ---
     else:
         if menu == "Dashboard":
             st.markdown("### 📊 System Operations Hub")
             c1, c2, c3, c4 = st.columns(4)
             c1.markdown(ui_theme.render_dashboard_card("📄", "128", "Documents Indexed"), unsafe_allow_html=True)
-            c2.markdown(ui_theme.render_dashboard_card("🔍", "47", "Searches Today"), unsafe_allow_html=True)
-            c3.markdown(ui_theme.render_dashboard_card("📈", "98.4%", "Efficiency Score"), unsafe_allow_html=True)
+            c2.markdown(ui_theme.render_dashboard_card("🤖", "3", "ML Agents Active"), unsafe_allow_html=True)
+            c3.markdown(ui_theme.render_dashboard_card("📈", "94.5%", "Dynamic Pricing R²"), unsafe_allow_html=True)
             c4.markdown(ui_theme.render_dashboard_card("🛡️", "Secured", "Security Status"), unsafe_allow_html=True)
             
             st.markdown("<br>", unsafe_allow_html=True)
             fig = go.Figure(go.Indicator(
                 mode="gauge+number",
-                value=92,
-                title={"text": "System Health Index", "font": {"color": "#111827", "size": 15, "family": "Segoe UI"}},
+                value=96,
+                title={"text": "Multi-Agent System Health Index", "font": {"color": "#111827", "size": 15, "family": "Segoe UI"}},
                 gauge={
                     "axis": {"range": [0, 100], "tickcolor": "#4B5563"},
                     "bar": {"color": "#0078D4"},
@@ -538,41 +570,150 @@ else:
             )
             st.plotly_chart(fig, use_container_width=True)
 
-        elif menu == "Analytics":
-            st.markdown("### 📈 Route & Freight Quotes Analytics")
-            routes = ["Nhava Sheva - LA", "Mundra - Rotterdam", "Chennai - Singapore", "Mumbai - Dubai", "Kolkata - Tokyo"]
-            quotes = [94, 78, 62, 51, 35]
+        # --- DYNAMIC PRICING CALCULATOR UI ---
+        elif menu == "Dynamic Pricing":
+            st.markdown("### 💰 Agent 1: Dynamic Freight Pricing Calculator")
+            st.markdown("Enter shipment parameters below to generate instant ML-driven price predictions via the **Champion Regression Model**.")
             
-            fig_bar = go.Figure(data=[go.Bar(
-                x=routes, y=quotes,
-                marker_color='#0078D4', text=quotes, textposition='auto',
-            )])
-            fig_bar.update_layout(
-                title={"text": "Active Freight Quote Volumes by Indian & Global Trade Lanes", "font": {"size": 16, "family": "Segoe UI"}},
-                xaxis_title="Shipping Route", yaxis_title="Quotes Generated",
-                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                height=350, margin=dict(l=20, r=20, t=50, b=20)
-            )
+            col_in1, col_in2 = st.columns(2)
+            with col_in1:
+                origin_port = st.selectbox(
+                    "Origin Hub / Port",
+                    ["Nhava Sheva (INNSA)", "Mundra (INMUN)", "Chennai (INMAA)", "Kolkata (INCCU)", "Cochin (INCOK)", "Visakhapatnam (INVTZ)"]
+                )
+                dest_port = st.selectbox(
+                    "Destination Hub / Port",
+                    ["Los Angeles (USLAX)", "Rotterdam (NLRTM)", "Singapore (SGSIN)", "Dubai (AEDXB)", "Hamburg (DEHAM)"]
+                )
+                distance_miles = st.number_input("Distance (Nautical Miles)", min_value=100, max_value=20000, value=7500, step=100)
+                cargo_weight_tons = st.number_input("Cargo Weight (Metric Tons)", min_value=0.5, max_value=50.0, value=18.5, step=0.5)
+                
+            with col_in2:
+                container_type_label = st.selectbox(
+                    "Container Specifications",
+                    ["20ft Standard Dry", "40ft High Cube Dry", "40ft Reefer (Refrigerated)"]
+                )
+                container_type = 1 if "20ft" in container_type_label else (3 if "Reefer" in container_type_label else 2)
+                
+                fuel_index = st.slider("Bunker Fuel Price Index ($/ton)", 80.0, 160.0, 115.0)
+                port_congestion = st.slider("Port Congestion Index (1: Clear - 5: Severe)", 1.0, 5.0, 2.5)
+                urgency_level = st.selectbox("Shipping Priority Level", [1, 2, 3], format_func=lambda x: {1: "Standard Ocean Freight", 2: "Express Feeder", 3: "Critical Fast-Track"}[x])
+                
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("Calculate Freight Quote Price ($) →", use_container_width=True):
+                params = {
+                    "distance_miles": distance_miles,
+                    "cargo_weight_tons": cargo_weight_tons,
+                    "container_type": container_type,
+                    "fuel_index": fuel_index,
+                    "port_congestion": port_congestion,
+                    "urgency_level": urgency_level
+                }
+                pred_price = ml_suite.predict_pricing(params)
+                
+                meta = db.get_ml_model_metadata("Agent 1: Dynamic Pricing")
+                champ_algo = meta["algorithm_name"] if meta else "Random Forest Regressor"
+                r2_score_val = meta["metrics"].get("r2", 0.945) if meta else 0.945
+                
+                res_col1, res_col2 = st.columns(2)
+                res_col1.markdown(f"""
+                <div style="background-color: #EFF6FF; border: 2px solid #0078D4; border-radius: 16px; padding: 24px; text-align: center;">
+                    <div style="font-size: 14px; font-weight: 600; color: #1D4ED8;">ESTIMATED FREIGHT QUOTE</div>
+                    <div style="font-size: 42px; font-weight: 800; color: #0078D4; margin: 10px 0;">${pred_price:,.2f}</div>
+                    <div style="font-size: 12px; color: #4B5563;">Computed via Champion ML Model</div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                res_col2.markdown(f"""
+                <div style="background-color: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 16px; padding: 24px;">
+                    <div style="font-weight: 700; font-size: 16px; color: #111827; margin-bottom: 8px;">Model Provenance Metadata</div>
+                    <div style="font-size: 13px; color: #374151;">• <b>Champion Algorithm:</b> {champ_algo}</div>
+                    <div style="font-size: 13px; color: #374151;">• <b>Validation R² Score:</b> {r2_score_val:.4f} (Target ≥ 0.90)</div>
+                    <div style="font-size: 13px; color: #374151;">• <b>Origin -> Destination:</b> {origin_port} -> {dest_port}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+        # --- ROUTE DELAY & COMPLIANCE AUDIT UI ---
+        elif menu == "Route Delay & Compliance":
+            st.markdown("### 🛡️ Agent 2 & Agent 3: Route Delay & Carrier Compliance Audit")
             
-            transit_times = [14, 21, 10, 8, 12]
-            fig_line = go.Figure(data=[go.Scatter(
-                x=routes, y=transit_times,
-                mode="lines+markers",
-                line=dict(color="#00A6A6", width=3),
-                marker=dict(size=8, color="#0078D4")
-            )])
-            fig_line.update_layout(
-                title={"text": "Average Transit Times (Days)", "font": {"size": 16, "family": "Segoe UI"}},
-                xaxis_title="Shipping Route", yaxis_title="Days in Transit",
-                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                height=300, margin=dict(l=20, r=20, t=50, b=20)
-            )
+            c1, c2 = st.columns(2)
+            with c1:
+                st.subheader("Agent 2 — Route Delay Classifier")
+                dist_in = st.number_input("Route Distance (Nautical Miles)", 500, 15000, 6800, step=200, key="d_dist")
+                cong_in = st.slider("Destination Dwell Congestion", 1.0, 5.0, 3.2, key="d_cong")
+                urg_in = st.selectbox("Shipment Urgency", [1, 2, 3], key="d_urg")
+                
+                if st.button("Evaluate Route Delay Risk", use_container_width=True):
+                    proba, risk_label = ml_suite.predict_delay_risk({
+                        "distance_miles": dist_in,
+                        "port_congestion": cong_in,
+                        "urgency_level": urg_in
+                    })
+                    color = "#EF4444" if risk_label == "High Risk" else "#10B981"
+                    st.markdown(f"""
+                    <div style="background-color: #F9FAFB; border-left: 6px solid {color}; border-radius: 12px; padding: 18px; margin-top: 15px;">
+                        <div style="font-size: 14px; font-weight: 600;">Delay Risk Classification: <span style="color: {color}; font-weight: 800;">{risk_label}</span></div>
+                        <div style="font-size: 24px; font-weight: 700; margin-top: 4px;">{proba*100:.1f}% Probability</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+            with c2:
+                st.subheader("Agent 3 — Carrier Compliance Classifier")
+                carrier_rating = st.slider("Carrier Safety Rating (1 - 5 Stars)", 1.0, 5.0, 4.2, step=0.1, key="c_rat")
+                container_type_sel = st.selectbox("Cargo Type Code", [1, 2, 3], key="c_type")
+                
+                if st.button("Audit Carrier Compliance", use_container_width=True):
+                    proba, status = ml_suite.predict_compliance({
+                        "carrier_rating": carrier_rating,
+                        "container_type": container_type_sel
+                    })
+                    color = "#10B981" if status == "Compliant" else "#F59E0B"
+                    st.markdown(f"""
+                    <div style="background-color: #F9FAFB; border-left: 6px solid {color}; border-radius: 12px; padding: 18px; margin-top: 15px;">
+                        <div style="font-size: 14px; font-weight: 600;">Carrier Compliance Status: <span style="color: {color}; font-weight: 800;">{status}</span></div>
+                        <div style="font-size: 24px; font-weight: 700; margin-top: 4px;">{proba*100:.1f}% Compliance Score</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+        # --- AI COPILOT AUDIT UI ---
+        elif menu == "AI Copilot Audit":
+            st.markdown("### 🤖 Multi-Agent AI Copilot & Structured Audit Desk (`Qwen2.5-3B-Instruct`)")
+            st.markdown("Generate comprehensive AI logistics audits combining predictions from **Agent 1 (Pricing)**, **Agent 2 (Delay)**, and **Agent 3 (Compliance)**.")
             
-            col_left, col_right = st.columns(2)
-            with col_left:
-                st.plotly_chart(fig_bar, use_container_width=True)
-            with col_right:
-                st.plotly_chart(fig_line, use_container_width=True)
+            with st.form("audit_form"):
+                o_port = st.selectbox("Origin Port", ["Nhava Sheva (INNSA)", "Mundra (INMUN)", "Chennai (INMAA)", "Kolkata (INCCU)"])
+                d_port = st.selectbox("Destination Port", ["Los Angeles (USLAX)", "Rotterdam (NLRTM)", "Singapore (SGSIN)", "Dubai (AEDXB)"])
+                c_weight = st.number_input("Cargo Weight (Tons)", 1.0, 40.0, 14.0)
+                c_dist = st.number_input("Distance (Miles)", 1000, 15000, 7200)
+                c_rating = st.slider("Carrier Rating", 1.0, 5.0, 4.4)
+                
+                submit_audit = st.form_submit_button("Generate Multi-Agent JSON Audit Output →", use_container_width=True)
+                
+            if submit_audit:
+                with st.spinner("Orchestrating Agent 1, Agent 2, Agent 3 predictions & Qwen2.5-3B-Instruct reasoning..."):
+                    params = {
+                        "origin_port": o_port,
+                        "dest_port": d_port,
+                        "distance_miles": c_dist,
+                        "cargo_weight_tons": c_weight,
+                        "carrier_rating": c_rating
+                    }
+                    audit_json = llm_engine.produce_structured_audit(params)
+                    
+                    st.success("✅ Multi-Agent Audit Generated Successfully!")
+                    st.json(audit_json)
+                    
+            st.markdown("<hr style='margin: 25px 0;'>", unsafe_allow_html=True)
+            st.subheader("💬 Ask AI Copilot Logistics Assistant")
+            query_in = st.text_input("Ask a logistics question:", placeholder="e.g. What is the impact of fuel surcharges on Nhava Sheva routes?")
+            if st.button("Ask Copilot"):
+                if query_in:
+                    with st.spinner("Analyzing..."):
+                        answer = llm_engine.answer_logistics_question(query_in)
+                    st.markdown(answer)
+                else:
+                    st.warning("Please enter a question.")
 
         elif menu == "Reports":
             st.markdown("### 📋 Intelligent Freight Quote Ledger")

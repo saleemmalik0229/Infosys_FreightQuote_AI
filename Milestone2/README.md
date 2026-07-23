@@ -1,38 +1,54 @@
 # FreightQuote AI — Milestone 2: Enterprise Multi-Agent Logistics Intelligence Platform
 
-Welcome to **FreightQuote AI Milestone 2**, an enterprise multi-agent logistics platform built on clean architecture, Python modular design, SQLite relational storage, bcrypt cryptography, and JWT authentication tokens.
+Welcome to **FreightQuote AI Milestone 2**, an enterprise multi-agent logistics platform built on clean architecture, Python modular design, SQLite relational storage, bcrypt cryptography, PyJWT session management, 3 independent ML Agents, and a 4-bit Quantized LLM Copilot (`Qwen/Qwen2.5-3B-Instruct`).
 
-This milestone extends Milestone 1 with enhanced security features, dynamic database schema migrations, and modular ML/LLM pipelines while preserving 100% backward compatibility and exact visual consistency with Milestone 1's UI design system.
+This milestone extends Milestone 1 with advanced machine learning, automated model selection, structured AI audits, and progressive account lockout security while preserving 100% backward compatibility and exact visual consistency with Milestone 1's UI design system.
 
 ---
 
-## 🚀 Key Platform Features & Upgrades
+## 🤖 3 Independent Machine Learning Agents
 
-### 1. Progressive Account Lockout Engine
-- **3 Failed Attempts**: Account is temporarily locked for **5 minutes** (300 seconds).
-- **4 Failed Attempts**: Account is temporarily locked for **15 minutes** (900 seconds).
-- **5 Failed Attempts**: Account is **locked** (`account_status = 'locked'`). Permanent unlock requires Administrator action via the Admin Desk.
+FreightQuote AI Milestone 2 deploys 3 specialized ML agents trained on logistics trade data:
 
-### 2. Live Password Strength Evaluator
-- Evaluates character length, uppercase/lowercase diversity, numbers, and special symbols dynamically as users type.
-- Displays a real-time badge in Streamlit:
-  - 🔴 **Weak (<5)**: Requires complexity improvements.
-  - 🟠 **Average (5-9)**: Meets basic security thresholds.
-  - 🟢 **Good (10+)**: Optimal cryptographic resistance.
+### 1. Agent 1 — Dynamic Pricing Agent (Regression)
+- **Objective**: Predicts freight quote prices ($) dynamically based on distance, cargo weight, container type, fuel index, port congestion, and shipping priority.
+- **Algorithms Evaluated (5)**: Random Forest, Gradient Boosting, Extra Trees, Ridge Regression, Decision Tree.
+- **Target R²**: $\ge 0.90$.
+- **Champion Selection**: Automatically selects highest $R^2$ model, saves `dynamic_pricing_agent.pkl` via `joblib`, and logs metadata in SQLite `ml_models` table.
 
-### 3. Escalating OTP Resend Cooldown
-- Protects password recovery against abuse by enforcing escalating delay intervals:
-  - 1st Resend: 60 seconds
-  - 2nd Resend: 180 seconds (3 minutes)
-  - 3rd Resend: 300 seconds (5 minutes)
-  - 4th+ Resend: 3600 seconds (1 hour)
+### 2. Agent 2 — Route Delay Prediction Agent (Classification)
+- **Objective**: Classifies shipment delay probability (1 = Delayed, 0 = On-Time).
+- **Algorithms Evaluated (5)**: Random Forest, Gradient Boosting, Extra Trees, Logistic Regression, AdaBoost.
+- **Metric Optimization**: Evaluates and optimizes **ROC-AUC** score (`roc_auc_score`).
+- **Champion Selection**: Automatically selects highest ROC-AUC classifier, saves `route_delay_agent.pkl` via `joblib`, and logs metadata in SQLite `ml_models` table.
 
-### 4. Non-Destructive Database Migrations
-- Dynamically updates the `users` table via `PRAGMA table_info` checks:
-  - `failed_attempts` (INTEGER)
-  - `lock_until` (REAL)
-  - `account_status` (TEXT)
-- All existing registered users, password hashes, and security credentials remain 100% intact.
+### 3. Agent 3 — Carrier Compliance Agent (Classification)
+- **Objective**: Classifies carrier compliance status (1 = Compliant, 0 = Non-Compliant / High Risk).
+- **Algorithms Evaluated (5)**: Random Forest, Gradient Boosting, Extra Trees, Logistic Regression, Decision Tree.
+- **Metric Optimization**: Evaluates and optimizes **ROC-AUC** score (`roc_auc_score`).
+- **Champion Selection**: Automatically selects highest ROC-AUC classifier, saves `carrier_compliance_agent.pkl` via `joblib`, and logs metadata in SQLite `ml_models` table.
+
+---
+
+## 🤖 Qwen2.5-3B-Instruct 4-Bit AI Copilot Engine
+
+- **LLM Specification**: `Qwen/Qwen2.5-3B-Instruct`.
+- **4-Bit GPU Acceleration**: Loaded using `bitsandbytes` with `load_in_4bit=True` and `torch.float16` compute on Colab T4 GPU.
+- **CPU Fallback**: Falls back gracefully to CPU pipeline / expert rule fallback engine when CUDA is unavailable.
+- **Multi-Agent Audit Generation**: `produce_structured_audit()` orchestrates predictions from Agent 1, Agent 2, and Agent 3 into verified **Structured JSON Audit Outputs**.
+
+---
+
+## 🔒 Security Upgrades (Preserved from Milestone 1)
+
+1. **Progressive Account Lockout Engine**:
+   - 3 failed attempts => 5 min lock (300s)
+   - 4 failed attempts => 15 min lock (900s)
+   - 5 failed attempts => Permanent lock (`account_status = 'locked'`) requiring Admin unlock.
+2. **Live Password Strength Evaluator**:
+   - Dynamic score calculation rendering live color badges (🔴 Weak, 🟠 Average, 🟢 Good).
+3. **Escalating OTP Resend Cooldown**:
+   - Rate limits password reset emails (60s, 180s, 300s, 3600s).
 
 ---
 
@@ -40,13 +56,17 @@ This milestone extends Milestone 1 with enhanced security features, dynamic data
 
 ```
 Milestone2/
-├── app.py                         # Streamlit application entry point
+├── app.py                         # Streamlit application entry point (Dynamic Pricing UI & AI Copilot Desk)
 ├── auth.py                        # Cryptography, JWT, Progressive Lockout, OTP Cooldown & Password Checker
-├── db.py                          # SQLite database engine, schema migrations, and admin data utilities
+├── db.py                          # SQLite database engine, schema migrations & ml_models table management
 ├── ui_theme.py                    # Milestone 1 CSS theme engine & reusable UI components
 ├── admin_dash.py                  # Admin Control Overview & Admin Account Unlock management
-├── train_ml_freight.py            # Modular Machine Learning pipeline (Freight Quote & Delay models)
-├── llm_engine_freight.py          # Modular Multi-Agent LLM Copilot Engine
+├── train_ml_freight.py            # Master ML training pipeline (Agent 1, Agent 2, Agent 3)
+├── llm_engine_freight.py          # Qwen2.5-3B-Instruct 4-bit quantized LLM Copilot Engine
+├── models/                        # Joblib model artifact directory (auto-created)
+│   ├── dynamic_pricing_agent.pkl
+│   ├── route_delay_agent.pkl
+│   └── carrier_compliance_agent.pkl
 ├── requirements.txt               # Milestone 2 Python package dependencies
 ├── FreightQuote_AI_Milestone2.ipynb # Google Colab & Jupyter Notebook execution workflow
 ├── README.md                      # Platform documentation (this file)
@@ -57,8 +77,6 @@ Milestone2/
 
 ## ⚓ Indian Port Coverage Matrix
 
-FreightQuote AI supports end-to-end logistics analytics and rate generation across major Indian maritime hubs and trade lanes:
-
 | Port Name | Port Code | Major Logistics Operations & Cargo Handling | Primary International Corridors |
 | :--- | :--- | :--- | :--- |
 | **Nhava Sheva (JNPT)** | `INNSA` | Largest container port in India, automated handling | US West Coast, Northern Europe |
@@ -68,94 +86,23 @@ FreightQuote AI supports end-to-end logistics analytics and rate generation acro
 | **Cochin (Vallarpadam)** | `INCOK` | International Transshipment Terminal | Red Sea, Europe, Direct Americas |
 | **Visakhapatnam** | `INVTZ` | Deepwater port specializing in minerals & petroleum | Asia-Pacific, Australia |
 | **Tuticorin (V.O.C.)** | `INTUT` | Major Southern hub for textiles & agricultural exports | Gulf Ports, Colombo Transshipment |
-| **Kandla (Deendayal)** | `IXY` | High-volume dry bulk and liquid cargo hub | Gulf Region, East Africa |
-| **Mormugao Port** | `INMRM` | Leading ore export terminal & container feeder hub | Western Europe, Asia |
-| **Paradip Port** | `INPRT` | Primary East Coast industrial dry bulk transshipment | East Asia, Southeast Asia |
-
----
-
-## 🔑 Environment Variables & Colab Secrets Setup
-
-The system reads credentials strictly from environment variables or Google Colab Secrets (never hardcoded):
-
-| Variable / Secret Key | Description | Required / Optional |
-| :--- | :--- | :--- |
-| `JWT_SECRET` | Secret key used to sign session and OTP tokens | Required (Fallback provided) |
-| `ADMIN_EMAIL` | Config-driven administrator email | Optional (Default: `infosys@ai`) |
-| `ADMIN_PASSWORD` | Config-driven administrator password | Optional (Default: `admin@123`) |
-| `EMAIL_ADDRESS` | Gmail address for sending OTP verification emails | Optional (Triggers Sandbox if missing) |
-| `EMAIL_PASSWORD` | Gmail App Password for SMTP authentication | Optional (Triggers Sandbox if missing) |
-| `HF_TOKEN` | HuggingFace Access Token for LLM multi-agent engine | Optional (Triggers Fallback if missing) |
-| `KAGGLE_USERNAME` | Kaggle account username for dataset access | Optional |
-| `KAGGLE_KEY` | Kaggle API key token for dataset downloading | Optional |
-| `NGROK_AUTHTOKEN` | Auth token for public proxy tunnel deployment | Optional |
-
----
-
-## 📊 Kaggle API Credentials Setup
-
-To configure Kaggle dataset access in Google Colab or local terminal:
-
-1. Download your `kaggle.json` key from **Kaggle Account Settings -> Create New Token**.
-2. Save credentials to environment variables or Colab Secrets:
-   ```bash
-   export KAGGLE_USERNAME="your_kaggle_username"
-   export KAGGLE_KEY="your_kaggle_api_key"
-   ```
-3. Or write `kaggle.json` programmatically:
-   ```python
-   import os, json
-   kaggle_dir = os.path.expanduser('~/.kaggle')
-   os.makedirs(kaggle_dir, exist_ok=True)
-   with open(os.path.join(kaggle_dir, 'kaggle.json'), 'w') as f:
-       json.dump({"username": os.environ["KAGGLE_USERNAME"], "key": os.environ["KAGGLE_KEY"]}, f)
-   os.chmod(os.path.join(kaggle_dir, 'kaggle.json'), 0o600)
-   ```
 
 ---
 
 ## ⚙️ Local Setup & Execution
 
-### 1. Prerequisites
-- Python 3.10 or higher.
-
-### 2. Environment Configuration
-In `Milestone2/`, create a `.env` file:
-```ini
-JWT_SECRET=your-secure-jwt-secret-key-2026
-ADMIN_EMAIL=infosys@ai
-ADMIN_PASSWORD=admin@123
-EMAIL_ADDRESS=your-gmail@gmail.com
-EMAIL_PASSWORD=your-app-password
-NGROK_AUTHTOKEN=your-ngrok-token
-```
-
-### 3. Install Dependencies
+### 1. Install Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Launch Application
+### 2. Train Champion ML Models
+```bash
+python train_ml_freight.py
+```
+
+### 3. Launch Streamlit Portal
 ```bash
 streamlit run app.py
 ```
 Open `http://localhost:8501` in your browser.
-
----
-
-## 🐍 Google Colab Setup (Ngrok Proxy Tunnel)
-
-1. Open `FreightQuote_AI_Milestone2.ipynb` in Google Colab.
-2. Add secrets in Colab Secrets tab (`NGROK_AUTHTOKEN`, `HF_TOKEN`, `EMAIL_ADDRESS`, `EMAIL_PASSWORD`).
-3. Run notebook cells sequentially to initialize environment, execute DB migrations, and launch Streamlit server with public Ngrok proxy URL.
-
----
-
-## 📷 Screenshots Section
-
-Visual documentation stored in `Milestone2/screenshots/`:
-- `login.png`: Dual-tab User & Admin login screen with progressive lockout notices.
-- `signup.png`: Account registration with live password strength badge.
-- `forgot_password.png`: Password reset options with escalating OTP cooldown.
-- `admin_dashboard.png`: Admin Control Desk & Account Unlocker interface.
-- `user_dashboard.png`: System Operations Hub with health index gauge.

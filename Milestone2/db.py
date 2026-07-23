@@ -60,7 +60,77 @@ def init_db():
         if "account_status" not in columns:
             cursor.execute("ALTER TABLE users ADD COLUMN account_status TEXT DEFAULT 'active'")
             
+        # 4. ML Models Metadata Table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS ml_models (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_name TEXT UNIQUE,
+                model_type TEXT,
+                algorithm_name TEXT,
+                metrics_json TEXT,
+                feature_names_json TEXT,
+                training_time_seconds REAL,
+                model_file_path TEXT,
+                created_at TEXT
+            )
+        """)
+        
         conn.commit()
+
+def save_ml_model_metadata(agent_name: str, model_type: str, algorithm_name: str, metrics: dict, feature_names: list, training_time: float, file_path: str):
+    """
+    Saves or updates champion ML model metadata in SQLite database.
+    """
+    import json
+    now_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO ml_models 
+            (agent_name, model_type, algorithm_name, metrics_json, feature_names_json, training_time_seconds, model_file_path, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(agent_name) DO UPDATE SET
+                model_type = ?,
+                algorithm_name = ?,
+                metrics_json = ?,
+                feature_names_json = ?,
+                training_time_seconds = ?,
+                model_file_path = ?,
+                created_at = ?
+        """, (
+            agent_name, model_type, algorithm_name, json.dumps(metrics), json.dumps(feature_names), training_time, file_path, now_str,
+            model_type, algorithm_name, json.dumps(metrics), json.dumps(feature_names), training_time, file_path, now_str
+        ))
+        conn.commit()
+
+def get_ml_model_metadata(agent_name: str):
+    """Fetches stored metadata for a specific agent model."""
+    import json
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM ml_models WHERE agent_name = ?", (agent_name,))
+        row = cursor.fetchone()
+        if row:
+            res = dict(row)
+            res["metrics"] = json.loads(res["metrics_json"])
+            res["feature_names"] = json.loads(res["feature_names_json"])
+            return res
+    return None
+
+def get_all_ml_models_metadata():
+    """Fetches directory of all champion models stored in database."""
+    import json
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM ml_models ORDER BY created_at DESC")
+        rows = cursor.fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["metrics"] = json.loads(d["metrics_json"])
+            d["feature_names"] = json.loads(d["feature_names_json"])
+            result.append(d)
+        return result
 
 def seed_initial_users(hash_func, check_func, admin_email, admin_password):
     """
