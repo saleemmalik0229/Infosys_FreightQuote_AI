@@ -60,6 +60,9 @@ def init_db():
         if "account_status" not in columns:
             cursor.execute("ALTER TABLE users ADD COLUMN account_status TEXT DEFAULT 'active'")
             
+        if "role" not in columns:
+            cursor.execute("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'Logistics Manager'")
+            
         # 4. ML Models Metadata Table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS ml_models (
@@ -135,20 +138,20 @@ def get_all_ml_models_metadata():
 def seed_initial_users(hash_func, check_func, admin_email, admin_password):
     """
     Seeds initial administrator and springboard mentor user accounts while preserving
-    existing account password hashes and user data.
+    existing account password hashes, custom roles, and user data.
     """
     init_db()
     users_to_seed = [
-        ("Administrator", admin_email, admin_password, "What is your pet name?", "admin"),
-        ("Springboard Mentor 018", "springboardmentor018@gmail.com", "Welcome@123", "What is your pet name?", "mentor"),
-        ("Springboard Mentor 038", "springboardmentor038@gmail.com", "Welcome@123", "What is your pet name?", "mentor")
+        ("Administrator", admin_email, admin_password, "What is your pet name?", "admin", "Admin"),
+        ("Springboard Mentor 018", "springboardmentor018@gmail.com", "Welcome@123", "What is your pet name?", "mentor", "Logistics Manager"),
+        ("Springboard Mentor 038", "springboardmentor038@gmail.com", "Welcome@123", "What is your pet name?", "mentor", "Operations Manager")
     ]
     
     now_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     
     with get_db() as conn:
         cursor = conn.cursor()
-        for name, email, pwd, sq, sa in users_to_seed:
+        for name, email, pwd, sq, sa, role in users_to_seed:
             cursor.execute("SELECT password_hash FROM users WHERE email=?", (email,))
             row = cursor.fetchone()
             
@@ -158,14 +161,47 @@ def seed_initial_users(hash_func, check_func, admin_email, admin_password):
             if not row:
                 cursor.execute("""
                     INSERT INTO users 
-                    (username, email, password_hash, security_question, security_answer_hash, created_at, failed_attempts, lock_until, account_status) 
-                    VALUES (?, ?, ?, ?, ?, ?, 0, 0, 'active')
-                """, (name, email, pwd_hash, sq, sa_hash, now_str))
+                    (username, email, password_hash, security_question, security_answer_hash, created_at, failed_attempts, lock_until, account_status, role) 
+                    VALUES (?, ?, ?, ?, ?, ?, 0, 0, 'active', ?)
+                """, (name, email, pwd_hash, sq, sa_hash, now_str, role))
             else:
-                # Sync configured admin credentials on startup if updated in config
-                if email == admin_email and not check_func(pwd, row["password_hash"]):
-                    cursor.execute("UPDATE users SET password_hash=? WHERE email=?", (pwd_hash, email))
+                # Sync configured admin credentials and role on startup if updated
+                if email == admin_email:
+                    cursor.execute("UPDATE users SET role='Admin' WHERE email=?", (email,))
+                    if not check_func(pwd, row["password_hash"]):
+                        cursor.execute("UPDATE users SET password_hash=? WHERE email=?", (pwd_hash, email))
         conn.commit()
+
+def add_user_by_admin(username: str, email: str, password_hash: str, role: str, security_question: str, security_answer_hash: str):
+    """Adds a new user with custom role via Admin tools."""
+    now_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO users 
+            (username, email, password_hash, security_question, security_answer_hash, created_at, failed_attempts, lock_until, account_status, role)
+            VALUES (?, ?, ?, ?, ?, ?, 0, 0, 'active', ?)
+        """, (username, email, password_hash, security_question, security_answer_hash, now_str, role))
+        conn.commit()
+        return True
+
+def update_user_role(email: str, new_role: str):
+    """Updates user role (Admin, Logistics Manager, Operations Manager, Auditor, Portal Client)."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE users SET role = ? WHERE email = ?", (new_role, email))
+        conn.commit()
+        return cursor.rowcount > 0
+
+def get_all_users():
+    """
+    Fetches all registered user records with roles for Admin Directory.
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, username, email, role, failed_attempts, lock_until, account_status, created_at FROM users")
+        rows = cursor.fetchall()
+        return [dict(r) for r in rows]
 
 def unlock_user_account(email: str):
     """
@@ -184,23 +220,34 @@ def unlock_user_account(email: str):
 
 def get_user_by_email(email: str):
     """
-    Fetches user record by email address.
+    Fetches user record by email address with safe role fallback.
     """
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM users WHERE email=?", (email,))
         row = cursor.fetchone()
-        return dict(row) if row else None
+        if row:
+            d = dict(row)
+            if "role" not in d or not d["role"]:
+                d["role"] = "Logistics Manager"
+            return d
+    return None
 
 def get_all_users():
     """
-    Fetches all registered user records for Admin Directory.
+    Fetches all registered user records with roles for Admin Directory.
     """
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT id, username, email, failed_attempts, lock_until, account_status, created_at FROM users")
+        cursor.execute("SELECT * FROM users")
         rows = cursor.fetchall()
-        return [dict(r) for r in rows]
+        result = []
+        for r in rows:
+            d = dict(r)
+            if "role" not in d or not d["role"]:
+                d["role"] = "Logistics Manager"
+            result.append(d)
+        return result
 
 def delete_user_by_email(email: str):
     """

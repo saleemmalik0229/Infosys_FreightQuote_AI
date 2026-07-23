@@ -142,7 +142,7 @@ if not st.session_state.token:
                             st.session_state.token = auth.make_jwt(email)
                             st.success("✅ Admin logged in successfully!")
                             time.sleep(0.5)
-                            navigate("Dashboard")
+                            navigate("Home Dashboard")
                             
                     if col2.button("Forgot Password?", use_container_width=True):
                         st.session_state.forgot_stage = "email"
@@ -178,7 +178,7 @@ if not st.session_state.token:
                                 st.session_state.token = auth.make_jwt(email)
                                 st.success("✅ Logged in successfully!")
                                 time.sleep(0.5)
-                                navigate("Dashboard")
+                                navigate("Home Dashboard")
                             else:
                                 err_msg = auth.record_failed_login(email)
                                 st.error(err_msg)
@@ -243,15 +243,15 @@ if not st.session_state.token:
                             with db.get_db() as conn:
                                 cursor = conn.cursor()
                                 cursor.execute("""
-                                    INSERT INTO users (username, email, password_hash, security_question, security_answer_hash, created_at, failed_attempts, lock_until, account_status)
-                                    VALUES (?, ?, ?, ?, ?, ?, 0, 0, 'active')
+                                    INSERT INTO users (username, email, password_hash, security_question, security_answer_hash, created_at, failed_attempts, lock_until, account_status, role)
+                                    VALUES (?, ?, ?, ?, ?, ?, 0, 0, 'active', 'Logistics Manager')
                                 """, (uname, email, pwd_hash, sq, sa_hash, now_str))
                                 conn.commit()
                                 
                             st.session_state.token = auth.make_jwt(email)
                             st.success("✅ Account created successfully!")
                             time.sleep(0.5)
-                            navigate("Dashboard")
+                            navigate("Home Dashboard")
                         except Exception:
                             st.error("❌ Email or Username is already registered.")
                             
@@ -450,7 +450,8 @@ else:
         st.rerun()
         
     uname = user_rec["username"]
-    is_admin = (email == ADMIN_EMAIL)
+    user_role = user_rec.get("role", "Logistics Manager")
+    is_admin = (email == ADMIN_EMAIL or user_role == "Admin")
 
     # --- SIDEBAR NAVIGATION ---
     with st.sidebar:
@@ -459,18 +460,21 @@ else:
             <div style="font-size: 36px; margin-bottom: 6px; color: #0078D4;">📦</div>
             <div style="font-weight: 700; font-size: 16px; color: #111827;">Infosys Portal</div>
             <div style="font-size: 11px; color: #4B5563; font-weight: 600; margin-top: 2px;">
-                {"🛡️ Admin Control Desk" if is_admin else "⚡ Enterprise AI Panel"}
+                {"🛡️ Admin Control Desk" if is_admin else f"⚙️ {user_role}"}
             </div>
         </div>
         <hr style="border-top: 1px solid #E5E7EB; margin: 10px 0 20px 0;">
         """, unsafe_allow_html=True)
 
+        opts = ["Home Dashboard", "Dynamic Pricing", "Route Prediction", "Carrier Compliance", "AI Copilot", "Reports"]
+        icons = ["house", "calculator", "graph-up", "shield-check", "robot", "file-text"]
+        
         if is_admin:
-            opts = ["Dashboard", "ML Model Directory", "Settings", "Logout"]
-            icons = ["house", "cpu", "gear", "box-arrow-right"]
-        else:
-            opts = ["Dashboard", "Dynamic Pricing", "Route Delay & Compliance", "AI Copilot Audit", "Reports", "Logout"]
-            icons = ["house", "calculator", "shield-check", "robot", "file-text", "box-arrow-right"]
+            opts.append("Admin Dashboard")
+            icons.append("gear")
+            
+        opts.append("Logout")
+        icons.append("box-arrow-right")
 
         menu = option_menu(
             menu_title=None,
@@ -513,217 +517,229 @@ else:
             time.sleep(0.5)
             st.rerun()
 
-    # --- TOP BRANDING HEADER ---
-    ui_theme.render_top_header(uname, is_admin)
+    # --- TOP BRANDING HEADER WITH CUSTOM ROLE ---
+    st.markdown(f"""
+    <div style="background: linear-gradient(135deg, #0078D4, #005A9E); border-radius: 16px; padding: 24px 32px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; color: #FFFFFF; box-shadow: 0px 4px 12px rgba(0, 120, 212, 0.15);">
+        <div>
+            <h1 style="color: #FFFFFF !important; margin: 0; font-size: 24px !important;">Infosys Springboard Portal</h1>
+            <div style="color: rgba(255, 255, 255, 0.85); font-size: 13px; font-weight: 500; margin-top: 2px;">
+                Intelligent Freight Quote Generation System — Milestone 2
+            </div>
+        </div>
+        <div style="background: rgba(255, 255, 255, 0.2); padding: 8px 18px; border-radius: 30px; font-weight: 600; font-size: 13px; border: 1px solid rgba(255, 255, 255, 0.3);">
+            👤 {uname} <span style="opacity: 0.8;">({user_role})</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    # --- ADMIN PAGES ---
-    if is_admin:
-        if menu == "Dashboard":
-            admin_dash.render_admin_dashboard(ngrok_url)
-        elif menu == "ML Model Directory":
-            st.markdown("### 🤖 SQLite Trained ML Champion Models (`ml_models` table)")
-            models_data = db.get_all_ml_models_metadata()
-            if models_data:
-                m_df = pd.DataFrame(models_data)[["id", "agent_name", "model_type", "algorithm_name", "training_time_seconds", "model_file_path", "created_at"]]
-                m_df.columns = ["ID", "Agent Name", "Model Type", "Champion Algorithm", "Training Time (s)", "Model Artifact Path", "Trained Date"]
-                st.dataframe(m_df, use_container_width=True, hide_index=True)
-                
-                st.markdown("<br>", unsafe_allow_html=True)
-                st.subheader("Champion Model Performance Metrics")
-                for md in models_data:
-                    with st.expander(f"📊 {md['agent_name']} — {md['algorithm_name']}"):
-                        st.json(md["metrics"])
-                        st.write("**Feature Names Used:**", md["feature_names"])
-            else:
-                st.info("No ML models currently trained in database. Run `python Milestone2/train_ml_freight.py` to train champion models.")
-        elif menu == "Settings":
-            admin_dash.render_admin_settings()
-
-    # --- REGULAR USER / ENTERPRISE PAGES ---
-    else:
-        if menu == "Dashboard":
-            st.markdown("### 📊 System Operations Hub")
-            c1, c2, c3, c4 = st.columns(4)
-            c1.markdown(ui_theme.render_dashboard_card("📄", "128", "Documents Indexed"), unsafe_allow_html=True)
-            c2.markdown(ui_theme.render_dashboard_card("🤖", "3", "ML Agents Active"), unsafe_allow_html=True)
-            c3.markdown(ui_theme.render_dashboard_card("📈", "94.5%", "Dynamic Pricing R²"), unsafe_allow_html=True)
-            c4.markdown(ui_theme.render_dashboard_card("🛡️", "Secured", "Security Status"), unsafe_allow_html=True)
-            
-            st.markdown("<br>", unsafe_allow_html=True)
-            fig = go.Figure(go.Indicator(
-                mode="gauge+number",
-                value=96,
-                title={"text": "Multi-Agent System Health Index", "font": {"color": "#111827", "size": 15, "family": "Segoe UI"}},
-                gauge={
-                    "axis": {"range": [0, 100], "tickcolor": "#4B5563"},
-                    "bar": {"color": "#0078D4"},
-                    "bgcolor": "#E5E7EB",
-                    "borderwidth": 1,
-                    "bordercolor": "#D1D5DB"
-                }
-            ))
-            fig.update_layout(
-                paper_bgcolor="rgba(0,0,0,0)",
-                font={"color": "#374151", "family": "Inter"},
-                height=260,
-                margin=dict(l=10, r=10, t=50, b=10)
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        # --- DYNAMIC PRICING CALCULATOR UI ---
-        elif menu == "Dynamic Pricing":
-            st.markdown("### 💰 Agent 1: Dynamic Freight Pricing Calculator")
-            st.markdown("Enter shipment parameters below to generate instant ML-driven price predictions via the **Champion Regression Model**.")
-            
-            col_in1, col_in2 = st.columns(2)
-            with col_in1:
-                origin_port = st.selectbox(
-                    "Origin Hub / Port",
-                    ["Nhava Sheva (INNSA)", "Mundra (INMUN)", "Chennai (INMAA)", "Kolkata (INCCU)", "Cochin (INCOK)", "Visakhapatnam (INVTZ)"]
-                )
-                dest_port = st.selectbox(
-                    "Destination Hub / Port",
-                    ["Los Angeles (USLAX)", "Rotterdam (NLRTM)", "Singapore (SGSIN)", "Dubai (AEDXB)", "Hamburg (DEHAM)"]
-                )
-                distance_miles = st.number_input("Distance (Nautical Miles)", min_value=100, max_value=20000, value=7500, step=100)
-                cargo_weight_tons = st.number_input("Cargo Weight (Metric Tons)", min_value=0.5, max_value=50.0, value=18.5, step=0.5)
-                
-            with col_in2:
-                container_type_label = st.selectbox(
-                    "Container Specifications",
-                    ["20ft Standard Dry", "40ft High Cube Dry", "40ft Reefer (Refrigerated)"]
-                )
-                container_type = 1 if "20ft" in container_type_label else (3 if "Reefer" in container_type_label else 2)
-                
-                fuel_index = st.slider("Bunker Fuel Price Index ($/ton)", 80.0, 160.0, 115.0)
-                port_congestion = st.slider("Port Congestion Index (1: Clear - 5: Severe)", 1.0, 5.0, 2.5)
-                urgency_level = st.selectbox("Shipping Priority Level", [1, 2, 3], format_func=lambda x: {1: "Standard Ocean Freight", 2: "Express Feeder", 3: "Critical Fast-Track"}[x])
-                
-            st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("Calculate Freight Quote Price ($) →", use_container_width=True):
-                params = {
-                    "distance_miles": distance_miles,
-                    "cargo_weight_tons": cargo_weight_tons,
-                    "container_type": container_type,
-                    "fuel_index": fuel_index,
-                    "port_congestion": port_congestion,
-                    "urgency_level": urgency_level
-                }
-                pred_price = ml_suite.predict_pricing(params)
-                
-                meta = db.get_ml_model_metadata("Agent 1: Dynamic Pricing")
-                champ_algo = meta["algorithm_name"] if meta else "Random Forest Regressor"
-                r2_score_val = meta["metrics"].get("r2", 0.945) if meta else 0.945
-                
-                res_col1, res_col2 = st.columns(2)
-                res_col1.markdown(f"""
-                <div style="background-color: #EFF6FF; border: 2px solid #0078D4; border-radius: 16px; padding: 24px; text-align: center;">
-                    <div style="font-size: 14px; font-weight: 600; color: #1D4ED8;">ESTIMATED FREIGHT QUOTE</div>
-                    <div style="font-size: 42px; font-weight: 800; color: #0078D4; margin: 10px 0;">${pred_price:,.2f}</div>
-                    <div style="font-size: 12px; color: #4B5563;">Computed via Champion ML Model</div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                res_col2.markdown(f"""
-                <div style="background-color: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 16px; padding: 24px;">
-                    <div style="font-weight: 700; font-size: 16px; color: #111827; margin-bottom: 8px;">Model Provenance Metadata</div>
-                    <div style="font-size: 13px; color: #374151;">• <b>Champion Algorithm:</b> {champ_algo}</div>
-                    <div style="font-size: 13px; color: #374151;">• <b>Validation R² Score:</b> {r2_score_val:.4f} (Target ≥ 0.90)</div>
-                    <div style="font-size: 13px; color: #374151;">• <b>Origin -> Destination:</b> {origin_port} -> {dest_port}</div>
-                </div>
-                """, unsafe_allow_html=True)
-
-        # --- ROUTE DELAY & COMPLIANCE AUDIT UI ---
-        elif menu == "Route Delay & Compliance":
-            st.markdown("### 🛡️ Agent 2 & Agent 3: Route Delay & Carrier Compliance Audit")
-            
-            c1, c2 = st.columns(2)
-            with c1:
-                st.subheader("Agent 2 — Route Delay Classifier")
-                dist_in = st.number_input("Route Distance (Nautical Miles)", 500, 15000, 6800, step=200, key="d_dist")
-                cong_in = st.slider("Destination Dwell Congestion", 1.0, 5.0, 3.2, key="d_cong")
-                urg_in = st.selectbox("Shipment Urgency", [1, 2, 3], key="d_urg")
-                
-                if st.button("Evaluate Route Delay Risk", use_container_width=True):
-                    proba, risk_label = ml_suite.predict_delay_risk({
-                        "distance_miles": dist_in,
-                        "port_congestion": cong_in,
-                        "urgency_level": urg_in
-                    })
-                    color = "#EF4444" if risk_label == "High Risk" else "#10B981"
-                    st.markdown(f"""
-                    <div style="background-color: #F9FAFB; border-left: 6px solid {color}; border-radius: 12px; padding: 18px; margin-top: 15px;">
-                        <div style="font-size: 14px; font-weight: 600;">Delay Risk Classification: <span style="color: {color}; font-weight: 800;">{risk_label}</span></div>
-                        <div style="font-size: 24px; font-weight: 700; margin-top: 4px;">{proba*100:.1f}% Probability</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-            with c2:
-                st.subheader("Agent 3 — Carrier Compliance Classifier")
-                carrier_rating = st.slider("Carrier Safety Rating (1 - 5 Stars)", 1.0, 5.0, 4.2, step=0.1, key="c_rat")
-                container_type_sel = st.selectbox("Cargo Type Code", [1, 2, 3], key="c_type")
-                
-                if st.button("Audit Carrier Compliance", use_container_width=True):
-                    proba, status = ml_suite.predict_compliance({
-                        "carrier_rating": carrier_rating,
-                        "container_type": container_type_sel
-                    })
-                    color = "#10B981" if status == "Compliant" else "#F59E0B"
-                    st.markdown(f"""
-                    <div style="background-color: #F9FAFB; border-left: 6px solid {color}; border-radius: 12px; padding: 18px; margin-top: 15px;">
-                        <div style="font-size: 14px; font-weight: 600;">Carrier Compliance Status: <span style="color: {color}; font-weight: 800;">{status}</span></div>
-                        <div style="font-size: 24px; font-weight: 700; margin-top: 4px;">{proba*100:.1f}% Compliance Score</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-        # --- AI COPILOT AUDIT UI ---
-        elif menu == "AI Copilot Audit":
-            st.markdown("### 🤖 Multi-Agent AI Copilot & Structured Audit Desk (`Qwen2.5-3B-Instruct`)")
-            st.markdown("Generate comprehensive AI logistics audits combining predictions from **Agent 1 (Pricing)**, **Agent 2 (Delay)**, and **Agent 3 (Compliance)**.")
-            
-            with st.form("audit_form"):
-                o_port = st.selectbox("Origin Port", ["Nhava Sheva (INNSA)", "Mundra (INMUN)", "Chennai (INMAA)", "Kolkata (INCCU)"])
-                d_port = st.selectbox("Destination Port", ["Los Angeles (USLAX)", "Rotterdam (NLRTM)", "Singapore (SGSIN)", "Dubai (AEDXB)"])
-                c_weight = st.number_input("Cargo Weight (Tons)", 1.0, 40.0, 14.0)
-                c_dist = st.number_input("Distance (Miles)", 1000, 15000, 7200)
-                c_rating = st.slider("Carrier Rating", 1.0, 5.0, 4.4)
-                
-                submit_audit = st.form_submit_button("Generate Multi-Agent JSON Audit Output →", use_container_width=True)
-                
-            if submit_audit:
-                with st.spinner("Orchestrating Agent 1, Agent 2, Agent 3 predictions & Qwen2.5-3B-Instruct reasoning..."):
-                    params = {
-                        "origin_port": o_port,
-                        "dest_port": d_port,
-                        "distance_miles": c_dist,
-                        "cargo_weight_tons": c_weight,
-                        "carrier_rating": c_rating
-                    }
-                    audit_json = llm_engine.produce_structured_audit(params)
-                    
-                    st.success("✅ Multi-Agent Audit Generated Successfully!")
-                    st.json(audit_json)
-                    
-            st.markdown("<hr style='margin: 25px 0;'>", unsafe_allow_html=True)
-            st.subheader("💬 Ask AI Copilot Logistics Assistant")
-            query_in = st.text_input("Ask a logistics question:", placeholder="e.g. What is the impact of fuel surcharges on Nhava Sheva routes?")
-            if st.button("Ask Copilot"):
-                if query_in:
-                    with st.spinner("Analyzing..."):
-                        answer = llm_engine.answer_logistics_question(query_in)
-                    st.markdown(answer)
-                else:
-                    st.warning("Please enter a question.")
-
-        elif menu == "Reports":
-            st.markdown("### 📋 Intelligent Freight Quote Ledger")
-            quotes_data = {
-                "Quote ID": ["FQ-2001", "FQ-2002", "FQ-2003", "FQ-2004", "FQ-2005"],
-                "Origin Hub": ["Nhava Sheva (INNSA)", "Mundra (INMUN)", "Chennai (INMAA)", "Kolkata (CCU)", "Cochin (COK)"],
-                "Destination Hub": ["Los Angeles (USLAX)", "Rotterdam (NLRTM)", "Singapore (SGSIN)", "Dubai (AEDXB)", "Hamburg (DEHAM)"],
-                "Cargo Category": ["Electronics", "Chemicals", "Textiles", "Machinery", "Automotive"],
-                "Freight Price ($)": [2650.00, 3280.00, 1920.00, 4450.00, 3100.00],
-                "Current Status": ["Approved", "Pending Match", "Approved", "Under Review", "Approved"]
+    # --- PAGE NAVIGATION ROUTING ---
+    if menu == "Home Dashboard":
+        st.markdown("### 📊 System Operations & Project KPI Dashboard")
+        
+        # Project-Specific KPI Metrics
+        users_count = len(db.get_all_users())
+        models_meta = db.get_all_ml_models_metadata()
+        tot_models = len(models_meta)
+        
+        meta1 = db.get_ml_model_metadata("Agent 1: Dynamic Pricing")
+        best_r2 = f"{meta1['metrics'].get('r2', 0.9965):.4f}" if meta1 else "0.9965"
+        
+        c1, c2, c3 = st.columns(3)
+        c1.markdown(ui_theme.render_dashboard_card("👥", str(users_count), "Total Users"), unsafe_allow_html=True)
+        c2.markdown(ui_theme.render_dashboard_card("🤖", "3 Active Agents", "Active ML Agents"), unsafe_allow_html=True)
+        c3.markdown(ui_theme.render_dashboard_card("🧠", "Qwen2.5-3B Ready", "AI Copilot Status"), unsafe_allow_html=True)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        c4, c5, c6 = st.columns(3)
+        c4.markdown(ui_theme.render_dashboard_card("📈", best_r2, "Best Pricing Model R²"), unsafe_allow_html=True)
+        c5.markdown(ui_theme.render_dashboard_card("📦", str(tot_models) + " Models", "Trained Champion Models"), unsafe_allow_html=True)
+        c6.markdown(ui_theme.render_dashboard_card("🛡️", "Secured", "Security Status"), unsafe_allow_html=True)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        fig = go.Figure(go.Indicator(
+            mode="gauge+number",
+            value=98,
+            title={"text": "Multi-Agent System Operational Index", "font": {"color": "#111827", "size": 15, "family": "Segoe UI"}},
+            gauge={
+                "axis": {"range": [0, 100], "tickcolor": "#4B5563"},
+                "bar": {"color": "#0078D4"},
+                "bgcolor": "#E5E7EB",
+                "borderwidth": 1,
+                "bordercolor": "#D1D5DB"
             }
-            df = pd.DataFrame(quotes_data)
-            st.dataframe(df, use_container_width=True, hide_index=True)
+        ))
+        fig.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)",
+            font={"color": "#374151", "family": "Inter"},
+            height=260,
+            margin=dict(l=10, r=10, t=50, b=10)
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    elif menu == "Dynamic Pricing":
+        st.markdown("### 💰 Agent 1: Dynamic Freight Pricing Calculator")
+        st.markdown("Enter shipment parameters below to generate instant ML-driven price predictions via the **Champion Regression Model**.")
+        
+        col_in1, col_in2 = st.columns(2)
+        with col_in1:
+            origin_port = st.selectbox(
+                "Origin Hub / Port",
+                ["Nhava Sheva (INNSA)", "Mundra (INMUN)", "Chennai (INMAA)", "Kolkata (INCCU)", "Cochin (INCOK)", "Visakhapatnam (INVTZ)"]
+            )
+            dest_port = st.selectbox(
+                "Destination Hub / Port",
+                ["Los Angeles (USLAX)", "Rotterdam (NLRTM)", "Singapore (SGSIN)", "Dubai (AEDXB)", "Hamburg (DEHAM)"]
+            )
+            distance_miles = st.number_input("Distance (Nautical Miles)", min_value=100, max_value=20000, value=7500, step=100)
+            cargo_weight_tons = st.number_input("Cargo Weight (Metric Tons)", min_value=0.5, max_value=50.0, value=18.5, step=0.5)
+            
+        with col_in2:
+            container_type_label = st.selectbox(
+                "Container Specifications",
+                ["20ft Standard Dry", "40ft High Cube Dry", "40ft Reefer (Refrigerated)"]
+            )
+            container_type = 1 if "20ft" in container_type_label else (3 if "Reefer" in container_type_label else 2)
+            
+            fuel_index = st.slider("Bunker Fuel Price Index ($/ton)", 80.0, 160.0, 115.0)
+            port_congestion = st.slider("Port Congestion Index (1: Clear - 5: Severe)", 1.0, 5.0, 2.5)
+            urgency_level = st.selectbox("Shipping Priority Level", [1, 2, 3], format_func=lambda x: {1: "Standard Ocean Freight", 2: "Express Feeder", 3: "Critical Fast-Track"}[x])
+            
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("Calculate Freight Quote Price ($) →", use_container_width=True):
+            params = {
+                "distance_miles": distance_miles,
+                "cargo_weight_tons": cargo_weight_tons,
+                "container_type": container_type,
+                "fuel_index": fuel_index,
+                "port_congestion": port_congestion,
+                "urgency_level": urgency_level
+            }
+            pred_price = ml_suite.predict_pricing(params)
+            
+            meta = db.get_ml_model_metadata("Agent 1: Dynamic Pricing")
+            champ_algo = meta["algorithm_name"] if meta else "Ridge Regression"
+            r2_score_val = meta["metrics"].get("r2", 0.9965) if meta else 0.9965
+            
+            res_col1, res_col2 = st.columns(2)
+            res_col1.markdown(f"""
+            <div style="background-color: #EFF6FF; border: 2px solid #0078D4; border-radius: 16px; padding: 24px; text-align: center;">
+                <div style="font-size: 14px; font-weight: 600; color: #1D4ED8;">ESTIMATED FREIGHT QUOTE</div>
+                <div style="font-size: 42px; font-weight: 800; color: #0078D4; margin: 10px 0;">${pred_price:,.2f}</div>
+                <div style="font-size: 12px; color: #4B5563;">Computed via Champion ML Model</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            res_col2.markdown(f"""
+            <div style="background-color: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 16px; padding: 24px;">
+                <div style="font-weight: 700; font-size: 16px; color: #111827; margin-bottom: 8px;">Model Provenance Metadata</div>
+                <div style="font-size: 13px; color: #374151;">• <b>Champion Algorithm:</b> {champ_algo}</div>
+                <div style="font-size: 13px; color: #374151;">• <b>Validation R² Score:</b> {r2_score_val:.4f} (Target ≥ 0.90)</div>
+                <div style="font-size: 13px; color: #374151;">• <b>Origin -> Destination:</b> {origin_port} -> {dest_port}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    elif menu == "Route Prediction":
+        st.markdown("### 📈 Agent 2: Route Delay Prediction Classifier")
+        st.markdown("Evaluate route congestion and transit delay probabilities using the **Champion Classification Agent**.")
+        
+        dist_in = st.number_input("Route Distance (Nautical Miles)", 500, 15000, 6800, step=200, key="d_dist")
+        cong_in = st.slider("Destination Terminal Congestion (1-5)", 1.0, 5.0, 3.2, key="d_cong")
+        urg_in = st.selectbox("Shipment Urgency Level", [1, 2, 3], key="d_urg")
+        
+        if st.button("Evaluate Route Delay Risk →", use_container_width=True):
+            proba, risk_label = ml_suite.predict_delay_risk({
+                "distance_miles": dist_in,
+                "port_congestion": cong_in,
+                "urgency_level": urg_in
+            })
+            color = "#EF4444" if risk_label == "High Risk" else "#10B981"
+            st.markdown(f"""
+            <div style="background-color: #F9FAFB; border-left: 6px solid {color}; border-radius: 12px; padding: 20px; margin-top: 15px;">
+                <div style="font-size: 14px; font-weight: 600;">Delay Risk Classification: <span style="color: {color}; font-weight: 800;">{risk_label}</span></div>
+                <div style="font-size: 28px; font-weight: 800; margin-top: 4px;">{proba*100:.1f}% Probability</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    elif menu == "Carrier Compliance":
+        st.markdown("### 🛡️ Agent 3: Carrier Compliance Evaluator")
+        st.markdown("Audit carrier safety scores and compliance status using the **Champion Carrier Classifier**.")
+        
+        carrier_rating = st.slider("Carrier Safety Rating (1 - 5 Stars)", 1.0, 5.0, 4.2, step=0.1, key="c_rat")
+        container_type_sel = st.selectbox("Container Category Code", [1, 2, 3], key="c_type")
+        
+        if st.button("Audit Carrier Compliance →", use_container_width=True):
+            proba, status = ml_suite.predict_compliance({
+                "carrier_rating": carrier_rating,
+                "container_type": container_type_sel
+            })
+            color = "#10B981" if status == "Compliant" else "#F59E0B"
+            st.markdown(f"""
+            <div style="background-color: #F9FAFB; border-left: 6px solid {color}; border-radius: 12px; padding: 20px; margin-top: 15px;">
+                <div style="font-size: 14px; font-weight: 600;">Carrier Compliance Status: <span style="color: {color}; font-weight: 800;">{status}</span></div>
+                <div style="font-size: 28px; font-weight: 800; margin-top: 4px;">{proba*100:.1f}% Compliance Score</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    elif menu == "AI Copilot":
+        st.markdown("### 🤖 Multi-Agent AI Copilot & Structured Audit Desk (`Qwen2.5-3B-Instruct`)")
+        st.markdown("Generate comprehensive AI logistics audits combining predictions from **Agent 1 (Pricing)**, **Agent 2 (Delay)**, and **Agent 3 (Compliance)**.")
+        
+        with st.form("audit_form"):
+            o_port = st.selectbox("Origin Port", ["Nhava Sheva (INNSA)", "Mundra (INMUN)", "Chennai (INMAA)", "Kolkata (INCCU)"])
+            d_port = st.selectbox("Destination Port", ["Los Angeles (USLAX)", "Rotterdam (NLRTM)", "Singapore (SGSIN)", "Dubai (AEDXB)"])
+            c_weight = st.number_input("Cargo Weight (Tons)", 1.0, 40.0, 14.0)
+            c_dist = st.number_input("Distance (Miles)", 1000, 15000, 7200)
+            c_rating = st.slider("Carrier Rating", 1.0, 5.0, 4.4)
+            
+            submit_audit = st.form_submit_button("Generate Multi-Agent JSON Audit Output →", use_container_width=True)
+            
+        if submit_audit:
+            with st.spinner("Orchestrating Agent 1, Agent 2, Agent 3 predictions & Qwen2.5-3B-Instruct reasoning..."):
+                params = {
+                    "origin_port": o_port,
+                    "dest_port": d_port,
+                    "distance_miles": c_dist,
+                    "cargo_weight_tons": c_weight,
+                    "carrier_rating": c_rating
+                }
+                audit_json = llm_engine.produce_structured_audit(params)
+                
+                st.success("✅ Multi-Agent Audit Generated Successfully!")
+                st.json(audit_json)
+                
+        st.markdown("<hr style='margin: 25px 0;'>", unsafe_allow_html=True)
+        st.subheader("💬 Ask AI Copilot Logistics Assistant")
+        query_in = st.text_input("Ask a logistics question:", placeholder="e.g. What is the impact of fuel surcharges on Nhava Sheva routes?")
+        if st.button("Ask Copilot"):
+            if query_in:
+                with st.spinner("Analyzing..."):
+                    answer = llm_engine.answer_logistics_question(query_in)
+                st.markdown(answer)
+            else:
+                st.warning("Please enter a question.")
+
+    elif menu == "Admin Dashboard":
+        if is_admin:
+            st.markdown("## 🛡️ Professional Admin Dashboard & ML Model Cards")
+            tab_desk, tab_cards, tab_settings = st.tabs(["📊 Overview Logs", "🤖 SQLite ML Model Cards", "⚙️ User & Role Management"])
+            with tab_desk:
+                admin_dash.render_admin_dashboard(ngrok_url)
+            with tab_cards:
+                admin_dash.render_ml_model_cards()
+            with tab_settings:
+                admin_dash.render_admin_settings()
+        else:
+            st.error("⛔ Access Restricted: Admin Dashboard is reserved for Administrator users.")
+
+    elif menu == "Reports":
+        st.markdown("### 📋 Intelligent Freight Quote Ledger")
+        quotes_data = {
+            "Quote ID": ["FQ-2001", "FQ-2002", "FQ-2003", "FQ-2004", "FQ-2005"],
+            "Origin Hub": ["Nhava Sheva (INNSA)", "Mundra (INMUN)", "Chennai (INMAA)", "Kolkata (CCU)", "Cochin (COK)"],
+            "Destination Hub": ["Los Angeles (USLAX)", "Rotterdam (NLRTM)", "Singapore (SGSIN)", "Dubai (AEDXB)", "Hamburg (DEHAM)"],
+            "Cargo Category": ["Electronics", "Chemicals", "Textiles", "Machinery", "Automotive"],
+            "Freight Price ($)": [2650.00, 3280.00, 1920.00, 4450.00, 3100.00],
+            "Current Status": ["Approved", "Pending Match", "Approved", "Under Review", "Approved"]
+        }
+        df = pd.DataFrame(quotes_data)
+        st.dataframe(df, use_container_width=True, hide_index=True)
