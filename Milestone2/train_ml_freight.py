@@ -52,8 +52,8 @@ def download_or_generate_dataset() -> pd.DataFrame:
     Downloads official Kaggle dataset if Kaggle credentials exist,
     otherwise generates rich synthetic freight dataset with Indian port corridors.
     """
-    k_user = _get_secret("KAGGLE_USERNAME")
-    k_key = _get_secret("KAGGLE_KEY")
+    k_user = _get_secret("saleemmalik0229")
+    k_key = _get_secret("c1a3e74d69b2d04080a32fe270d7fd7f")
     
     if k_user and k_key:
         try:
