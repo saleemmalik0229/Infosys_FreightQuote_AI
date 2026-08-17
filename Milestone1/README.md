@@ -1,6 +1,6 @@
-# Infosys Springboard Portal: Intelligent Freight Quote Generation System
+# Infosys Springboard Portal: Agentic AI for Maritime Freight Pricing and Route Optimization
 
-Welcome to the **Infosys Springboard Portal**, an intelligent platform engineered to authenticate users, manage admin operations, and showcase advanced logistics analytics metrics for the *Intelligent Freight Quote Generation System* (Virtual Internship 7.0 - Milestone 1).
+Welcome to the **Infosys Springboard Portal**, an intelligent platform engineered to authenticate users, manage admin operations, and showcase advanced logistics analytics metrics for the *Agentic AI for Maritime Freight Pricing and Route Optimization* (Virtual Internship 7.0 - Milestone 1).
 
 This system is built using a secure, responsive, and visual Python web stack powered by Streamlit, SQLite, bcrypt password hashing, and signed JWT authentication tokens.
 

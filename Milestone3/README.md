@@ -1,4 +1,4 @@
-# 🚢 FreightQuote AI – Enterprise AI-Powered Maritime Brokerage Platform
+# 🚢 FreightQuote AI – Agentic AI for Maritime Freight Pricing and Route Optimization
 
 > **Infosys Springboard Internship Project – Milestone 3**
 
@@ -206,7 +206,7 @@ flowchart TD
 ## 📁 Repository Structure
 
 ```
-Infosys_FreightQuote_AI/
+Agentic-AI-for-Maritime-Freight-Pricing-and-Route-Optimization/
 │
 ├── README.md
 ├── screenshots/
@@ -446,8 +446,8 @@ Follow these steps to set up and run FreightQuote AI on your local environment:
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/your-username/Infosys_FreightQuote_AI.git
-cd Infosys_FreightQuote_AI
+git clone https://github.com/your-username/Agentic-AI-for-Maritime-Freight-Pricing-and-Route-Optimization.git
+cd Agentic-AI-for-Maritime-Freight-Pricing-and-Route-Optimization
 ```
 
 ### 2. Create and Activate Virtual Environment

@@ -1,4 +1,4 @@
-# FreightQuote AI — Milestone 2: Enterprise Multi-Agent Logistics Intelligence Platform
+# FreightQuote AI — Milestone 2: Agentic AI for Maritime Freight Pricing and Route Optimization
 
 Welcome to **FreightQuote AI Milestone 2**, an enterprise multi-agent logistics platform built on clean architecture, Python modular design, SQLite relational storage, bcrypt cryptography, PyJWT session management, 3 independent ML Agents, and a 4-bit Quantized LLM Copilot (`Qwen/Qwen2.5-3B-Instruct`).
 
